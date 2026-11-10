@@ -126,6 +126,7 @@ structured dict rather than CLI text output). This is rarely necessary — see
 | OpenReview | `openreview` |
 | Semantic Scholar | `semantic_scholar` |
 | Crossref | `crossref` |
+| Sciverse (enabled by a configured `SCIVERSE_API_TOKEN`) | `sciverse` |
 | Model knowledge (LLM recall, no API call) | `model_knowledge` |
 
 ## Output schema

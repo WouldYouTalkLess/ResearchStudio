@@ -19,7 +19,7 @@ import re
 # Display/priority order: highest-signal source first. Dedup keeps the record
 # from the earliest source in this list; the CLI prints groups in this order.
 CANONICAL_ORDER = ["semantic_scholar", "open_alex", "arxiv", "openreview",
-                   "crossref", "dblp"]
+                   "crossref", "dblp", "sciverse"]
 
 _STOP = {"with", "from", "that", "this", "into", "over", "under", "then",
          "than", "them", "their", "through", "based", "using", "toward",
@@ -118,6 +118,8 @@ def dedup(results) -> list:
             idx = len(clusters) - 1
         else:
             rec = clusters[idx]
+            from sciverse_client import merge_evidence
+            merge_evidence(rec, p)
             src = p.get("source")
             if src and src not in rec["found_in"]:
                 rec["found_in"].append(src)

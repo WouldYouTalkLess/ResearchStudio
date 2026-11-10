@@ -223,6 +223,10 @@ CONNECTORS = [
     ('semanticscholar', 'scripts.search_semanticscholar', [],                                       []),  # SEMANTICSCHOLAR_API_KEY optional (anonymous tier works at lower rate)
     ('openreview',      'scripts.search_openreview',      ['OPENREVIEW_USER', 'OPENREVIEW_PASS'],   ['openreview']),
 ]
+# Keep the optional source out of coverage requirements when no token is configured.
+from scripts.sciverse_client import available as _sciverse_available
+if _sciverse_available():
+    CONNECTORS.append(('sciverse', 'scripts.search_sciverse', ['SCIVERSE_API_TOKEN'], []))
 
 # Phase 0 map-mode retrieval is a list of JOBS, not one-job-per-connector: one
 # connector may run several windows, and the 0-6mo freshness window is covered by
@@ -251,6 +255,13 @@ PHASE0_RETRIEVAL_JOBS = [
     # connector, in-review (unrefereed) quality, and ML submissions mostly mirror to arXiv anyway.
     {'job': 'openreview',       'connector': 'openreview',      'window_min': 0, 'window_max': 6,  'max_results': 10, 'max_per_query': 50,  'extra_args': [], 'timeout': 600},
 ]
+if _sciverse_available():
+    PHASE0_RETRIEVAL_JOBS.extend([
+        {'job': 'sciverse_recent', 'connector': 'sciverse', 'window_min': 0, 'window_max': 6,
+         'max_results': 15, 'max_per_query': 40, 'extra_args': [], 'timeout': 300},
+        {'job': 'sciverse', 'connector': 'sciverse', 'window_min': 6, 'window_max': 24,
+         'max_results': 15, 'max_per_query': 40, 'extra_args': ['--published-only'], 'timeout': 300},
+    ])
 
 
 def _resolve_pool_caps():
@@ -314,7 +325,7 @@ COLLISION_CHANNEL_CAP = 120
 # Semantic Scholar wins because its `externalIds` block (DOI + ArXiv + DBLP keys all in one record)
 # makes it the strongest cross-source dedup anchor; it also returns abstracts + TLDR.
 # Then openalex (peer-reviewed metadata) > openreview (in-review) > arxiv (preprint).
-DEDUP_PRIORITY = {'semanticscholar': 4, 'openalex': 3, 'openreview': 2, 'arxiv': 1}
+DEDUP_PRIORITY = {'semanticscholar': 4, 'openalex': 3, 'openreview': 2, 'arxiv': 1, 'sciverse': 0}
 
 
 # --- connector availability ------------------------------------------------
@@ -894,9 +905,10 @@ def cmd_phase0(args) -> int:
     # if both openalex + semanticscholar failed but at least one of arxiv/openreview worked,
     # the published-window (6-24mo peer-reviewed) is empty. Currently informational;
     # downstream can decide whether to downgrade lit_grounding_mode.
-    published_succeeded = any(s in successes for s in ('openalex', 'semanticscholar'))
+    published_succeeded = (any(s in successes for s in ('openalex', 'semanticscholar')) or
+                           any(path.stem == 'sciverse_phase0' for path, _ in hits_files))
     if not published_succeeded:
-        print(f'\nNOTE: no published-source connector succeeded (openalex + semanticscholar both unavailable). '
+        print(f'\nNOTE: no published-source retrieval succeeded (including optional Sciverse). '
               f'Phase 0 ran on preprint-only sources ({", ".join(successes)}); '
               f'6-24mo peer-reviewed window is empty. Phase 1 will see preprint-only evidence.',
               file=sys.stderr)

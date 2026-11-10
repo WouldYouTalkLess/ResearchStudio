@@ -48,6 +48,9 @@ def interleave_by_query(per_query: Iterable[list], key_of: Callable[[dict], Opti
                 continue
             label = qtext[qi] if qi < len(qtext) else None
             if key in seen:
+                if h.get('sciverse_records'):
+                    from scripts.sciverse_client import merge_evidence
+                    merge_evidence(seen[key], h)
                 # Same paper reachable from another query — credit that query too,
                 # rather than attributing the paper to whichever query happened to
                 # rank it first.

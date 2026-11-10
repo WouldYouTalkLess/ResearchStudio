@@ -97,9 +97,9 @@ _NON_METHOD_HEAD = re.compile(
 # Stop boundaries — when to stop accumulating a section's body
 _NEXT_SECTION_HEAD = re.compile(
     r"^\s*(?:\d+(?:\.\d+)*[\.\)]?\s+|[IVX]+[\.\)]?\s+)?"
-    r"(related\s+work|background|preliminar|experiment|result|evaluation"
-    r"|ablation|discussion|conclusion|reference|acknowledgement|appendix"
-    r"|broader\s+impact|limitation)\b",
+    r"(related\s+works?|backgrounds?|preliminar(?:y|ies)|experiments?|results?|evaluations?"
+    r"|ablations?|discussions?|conclusions?|references?|acknowledgements?|appendix|appendices"
+    r"|broader\s+impacts?|limitations?)\b",
     re.IGNORECASE,
 )
 
@@ -441,8 +441,7 @@ def _fetch_cache_get(paper_meta: dict) -> "dict | None":
         secs = doc.get('sections') or {}
         if secs.get('source_used') in (None, 'failed'):
             return None
-        return {'intro': secs.get('intro', ''), 'method': secs.get('method', ''),
-                'source_used': secs['source_used'], 'warning': secs.get('warning')}
+        return dict(secs)  # retain Sciverse document IDs, offsets and read coverage
     except Exception:
         return None  # cache is an accelerator, never a failure source
 
@@ -495,6 +494,13 @@ def _fetch_sections_uncached(paper_meta: dict, pdf_timeout: int = 30,
     """
     deadline = time.monotonic() + per_paper_budget_s
     abstract = paper_meta.get("abstract") or ""
+
+    # Known Sciverse documents can be read directly. Ordinary HTML/PDF paths
+    # remain available if the provider is down or section extraction fails.
+    if paper_meta.get('sciverse_records'):
+        sections = _fetch_sciverse_sections(paper_meta, deadline)
+        if sections is not None:
+            return sections
 
     arxiv_id = _extract_arxiv_id(paper_meta)
     or_id = _extract_openreview_id(paper_meta)
@@ -563,6 +569,13 @@ def _fetch_sections_uncached(paper_meta: dict, pdf_timeout: int = 30,
                         if secs["intro"] or secs["method"]:
                             return {**secs, "source_used": "pdf_ss_doi_pymupdf", "warning": None}
 
+    # For papers from other engines, resolve an exact DOI/title in Sciverse only
+    # after the existing paths fail. A fuzzy match must never supply evidence.
+    if not paper_meta.get('sciverse_records'):
+        sections = _fetch_sciverse_sections(paper_meta, deadline)
+        if sections is not None:
+            return sections
+
     # All paths failed — fall back to abstract for intro, empty for method
     return {
         "intro": abstract,
@@ -570,6 +583,31 @@ def _fetch_sections_uncached(paper_meta: dict, pdf_timeout: int = 30,
         "source_used": "failed",
         "warning": "fetch failed across all paths; intro filled with abstract; method empty",
     }
+
+
+def _fetch_sciverse_sections(paper_meta: dict, deadline: float) -> Optional[dict]:
+    from scripts.sciverse_client import Client, SciverseError, available
+    if not available() or time.monotonic() >= deadline:
+        return None
+    try:
+        client = Client(timeout=25, deadline=deadline)
+        for record in client.locate(paper_meta):
+            document = client.read_document(record['doc_id'])
+            # Existing heading parser expects plain headings, not Markdown '#'.
+            text = re.sub(r'(?m)^#{1,6}\s+', '', document['text'])
+            sections = parse_raw_text_sections(text)
+            if sections['intro'] or sections['method']:
+                return {**sections, 'source_used': 'sciverse_content',
+                        'warning': None if document['complete'] else
+                        'Sciverse read reached its page cap; sections may be truncated',
+                        'sciverse_doc_id': record['doc_id'],
+                        'sciverse_unique_id': record.get('unique_id'),
+                        'sciverse_content_complete': document['complete'],
+                        'sciverse_read_ranges': document['ranges'],
+                        'sciverse_next_offset': document['next_offset']}
+    except SciverseError as exc:
+        print(f'[sciverse] full-text path unavailable: {exc}; trying other sources', file=sys.stderr)
+    return None
 
 
 def fetch_pool(pool: list[dict], max_workers: int = 15,
