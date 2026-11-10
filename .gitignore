@@ -35,3 +35,7 @@ venv/
 *.log
 logs/
 .omc/
+
+# Generated agent configuration and installed skill copies (may contain local paths).
+.codex/
+.claude/

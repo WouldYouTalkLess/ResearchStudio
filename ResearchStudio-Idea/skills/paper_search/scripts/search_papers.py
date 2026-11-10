@@ -45,6 +45,7 @@ _SOURCE_MODULE = {
     "openreview": "search_papers_by_openreview",
     "semantic_scholar": "search_papers_by_semantic_scholar",
     "crossref": "search_papers_by_crossref",
+    "sciverse": "search_papers_by_sciverse",
 }
 ALL_SOURCES = list(_SOURCE_MODULE.keys())
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -303,6 +304,9 @@ def search_papers(
         Each paper dict contains: title, authors, year, abstract, url,
         venue, citation_count, publication_date, source.
     """
+    if sources is None:
+        from sciverse_client import available
+        sources = [s for s in ALL_SOURCES if s != 'sciverse' or available()]
     sources = list(dict.fromkeys(sources or ALL_SOURCES))
     invalid = set(sources) - set(ALL_SOURCES)
     if invalid:
@@ -362,6 +366,10 @@ if __name__ == "__main__":
         help="Optional YYYY-MM-DD inclusive upper bound; applied as a post-filter",
     )
     parser.add_argument(
+        "--json", dest="json_path", type=Path,
+        help="Save unranked per-source records, including abstracts and evidence pointers",
+    )
+    parser.add_argument(
         "--raw", action="store_true",
         help="Legacy per-source view: no dedup, no ranking (full raw output)",
     )
@@ -386,6 +394,9 @@ if __name__ == "__main__":
         start_date=args.start_date,
         end_date=args.end_date,
     )
+    if args.json_path:
+        args.json_path.parent.mkdir(parents=True, exist_ok=True)
+        args.json_path.write_text(json.dumps(results, ensure_ascii=False, indent=2))
 
     if args.raw:
         total = 0
@@ -423,6 +434,9 @@ if __name__ == "__main__":
             print(f"      Year: {p['year']}  Citations: {p['citation_count']}  Venue: {p['venue']}")
             print(f"      Sources: {srcs}" + (f"  {ids}" if ids else ""))
             print(f"      URL: {p['url']}")
+            for evidence in p.get('sciverse_records') or []:
+                print(f"      Sciverse: doc_id={evidence.get('doc_id') or '(no full text)'} "
+                      f"unique_id={evidence.get('unique_id') or '(not supplied)'}")
             print()
         print(f"Total: {len(ranked)} unique papers (ranked; surveys sunk to the bottom).")
 

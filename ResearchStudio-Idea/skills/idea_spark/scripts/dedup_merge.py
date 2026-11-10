@@ -55,6 +55,8 @@ def main():
                 # First time seeing this paper — file order wins
                 by_key[key] = h
             else:
+                from scripts.sciverse_client import merge_evidence
+                merge_evidence(cur, h)
                 # Backfill abstract / citations from later (lower-priority) source if primary lacks them
                 if not cur.get('abstract') and h.get('abstract'):
                     cur['abstract'] = h['abstract']

@@ -111,3 +111,9 @@ If ResearchStudio - Idea / IdeaSpark helps your research workflow, please cite:
   url     = {https://arxiv.org/abs/2607.04439}
 }
 ```
+
+## Optional Sciverse integration
+
+This fork supports Sciverse paper metadata, semantic snippets and full-text
+reading in Paper Search and IdeaSpark. See [SCIVERSE.md](SCIVERSE.md) for setup,
+evidence/provenance semantics, tests and merging official updates.
